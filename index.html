@@ -1,0 +1,732 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Instrumenting Neo4j with OpenTelemetry</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .section-card {
+            background-color: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 1.5rem;
+            margin-bottom: 2.5rem;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            transition: box-shadow 0.3s ease;
+            padding: 2.5rem;
+        }
+        .section-card:hover {
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+        }
+        .header-bg {
+            background: linear-gradient(135deg, #06b6d4, #3b82f6, #8b5cf6);
+            background-size: 200% 200%;
+            animation: gradient-animation 10s ease infinite;
+        }
+        @keyframes gradient-animation {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+        .kicker {
+            font-weight: 700;
+            color: #8b5cf6;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        .code-block {
+            background-color: #1e293b;
+            color: #e2e8f0;
+            padding: 1.5rem;
+            border-radius: 1rem;
+            font-family: 'Courier New', Courier, monospace;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+        .flow-arrow {
+            font-size: 3rem;
+            color: #94a3b8;
+            align-self: center;
+            margin: 0 1rem;
+        }
+        .icon-box {
+            background-color: #e0e7ff;
+            border-radius: 50%;
+            padding: 1rem;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 1rem;
+        }
+        /* Modal styles */
+        .modal-container {
+            max-height: 90vh; /* Ensure modal is never taller than the screen */
+            overflow-y: auto; /* Allow scrolling if content is too long */
+        }
+        .modal-content {
+            transition: transform 0.3s ease, opacity 0.3s ease;
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800">
+
+    <!-- Header Section -->
+    <header class="header-bg text-white text-center p-12 md:p-20 rounded-b-3xl mb-12">
+        <div class="max-w-4xl mx-auto">
+            <h1 class="text-4xl md:text-6xl font-black mb-4">Instrumenting Neo4j with OpenTelemetry</h1>
+            <p class="text-xl md:text-2xl font-light">A Practical Guide for Observability When Direct Instrumentation Isn't an Option</p>
+        </div>
+    </header>
+
+    <main class="max-w-5xl mx-auto p-4 md:p-8">
+
+        <!-- Section 1: The Core Problem -->
+        <section id="problem" class="section-card">
+            <div class="flex items-center mb-6">
+                <div class="icon-box bg-red-100 mb-0">
+                    <svg class="h-8 w-8 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 01-18 0 9 9 0 0118 0z" /></svg>
+                </div>
+                <h2 class="text-3xl font-bold ml-4">The Challenge: No Direct OTel Library for Python</h2>
+            </div>
+            <div>
+                <p class="text-lg mb-4 text-slate-600">
+                    Our initial investigation sought a direct OpenTelemetry (OTel) instrumentation library compatible with our Neo4j Python driver and application framework.
+                </p>
+                <div class="bg-red-50 border-l-4 border-red-500 text-red-800 p-6 rounded-r-lg">
+                    <p class="font-bold text-xl">Key Finding:</p>
+                    <p class="text-lg">A dedicated, stable OTel instrumentation library for the official Neo4j Python driver does not currently exist.</p>
+                </div>
+                <p class="mt-6 text-lg text-slate-600">
+                    This presents a challenge: How do we gain critical observability into our Neo4j database performance and integrate it into our existing OpenTelemetry ecosystem without a simple plug-and-play solution?
+                </p>
+            </div>
+        </section>
+
+        <!-- Section 2: The Solution Path - Neo4j's Native Metrics -->
+        <section id="solution" class="section-card">
+            <div class="flex items-center mb-6">
+                <div class="icon-box bg-green-100 mb-0">
+                    <svg class="h-8 w-8 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" /></svg>
+                </div>
+                <h2 class="text-3xl font-bold ml-4">The Solution: Leveraging Neo4j's Native Metrics</h2>
+            </div>
+            <div>
+                <p class="text-lg mb-6 text-slate-600">
+                    While direct application-level instrumentation isn't an option, the path to observability lies in using Neo4j's robust, built-in capabilities for exposing aggregated metrics. These provide a wealth of data directly from the database itself.
+                </p>
+
+                <div class="mb-6 bg-gray-100 p-4 rounded-lg flex items-center text-sm">
+                    <svg class="h-5 w-5 text-gray-500 mr-3 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                    <span class="text-slate-600">
+                        For a complete list of available metrics and configuration options, see the 
+                        <a href="https://neo4j.com/docs/operations-manual/current/monitoring/metrics/expose/" target="_blank" rel="noopener noreferrer" class="font-semibold text-blue-600 hover:underline">
+                            official Neo4j documentation
+                        </a>.
+                    </span>
+                </div>
+
+                <div class="grid md:grid-cols-2 gap-6">
+                    <!-- CSV Card -->
+                    <div id="open-csv-modal" class="cursor-pointer block hover:-translate-y-1 hover:shadow-lg transition-all duration-300 h-full">
+                        <div class="p-6 bg-red-50 rounded-xl shadow-md border border-red-200 h-full">
+                            <div class="flex justify-between items-center mb-2">
+                                <h3 class="text-xl font-bold">1. CSV Files</h3>
+                                <span class="text-xs font-semibold inline-block py-1 px-2 uppercase rounded-full text-green-600 bg-green-200">Enabled by Default</span>
+                            </div>
+                            <p class="text-slate-600">Retrieve metrics from periodically generated CSV files. Useful for historical analysis and batch processing.</p>
+                        </div>
+                    </div>
+                    <!-- JMX MBeans Card -->
+                    <div id="open-jmx-modal" class="cursor-pointer block hover:-translate-y-1 hover:shadow-lg transition-all duration-300 h-full">
+                        <div class="p-6 bg-red-50 rounded-xl shadow-md border border-red-200 h-full">
+                             <div class="flex justify-between items-center mb-2">
+                                <h3 class="text-xl font-bold">2. JMX MBeans</h3>
+                                <span class="text-xs font-semibold inline-block py-1 px-2 uppercase rounded-full text-green-600 bg-green-200">Enabled by Default</span>
+                            </div>
+                            <p class="text-slate-600">Expose metrics via Java Management Extensions (JMX), a standard for monitoring Java applications.</p>
+                        </div>
+                    </div>
+                    <!-- Graphite Card -->
+                    <div id="open-graphite-modal" class="cursor-pointer block hover:-translate-y-1 hover:shadow-lg transition-all duration-300 h-full">
+                        <div class="p-6 bg-red-50 rounded-xl shadow-md border border-red-200 h-full">
+                             <div class="flex justify-between items-center mb-2">
+                                <h3 class="text-xl font-bold">3. Graphite</h3>
+                                 <span class="text-xs font-semibold inline-block py-1 px-2 uppercase rounded-full text-gray-600 bg-gray-200">Disabled by Default</span>
+                            </div>
+                            <p class="text-slate-600">Actively send metrics to a Graphite server or any compatible monitoring tool based on the Graphite protocol.</p>
+                        </div>
+                    </div>
+                    <!-- Prometheus Card -->
+                    <div id="open-prometheus-modal" class="cursor-pointer group block rounded-xl shadow-lg border-2 border-green-500 relative h-full transition-all duration-300 hover:-translate-y-1 hover:shadow-xl">
+                        <div class="absolute top-0 right-0 -mt-2 -mr-2 z-20">
+                            <span class="px-3 py-1 bg-green-500 text-white text-xs font-bold rounded-full shadow-lg">RECOMMENDED</span>
+                        </div>
+                        <div class="relative h-full w-full rounded-xl overflow-hidden">
+                            <div class="p-6 bg-green-50 h-full">
+                                <div class="flex justify-between items-center mb-2">
+                                    <h3 class="text-xl font-bold">4. Prometheus</h3>
+                                    <span class="text-xs font-semibold inline-block py-1 px-2 uppercase rounded-full text-gray-600 bg-gray-200">Disabled by Default</span>
+                                </div>
+                                <p class="text-slate-600">Publish metrics for polling as a Prometheus endpoint, ideal for integration with modern observability stacks.</p>
+                            </div>
+                            <div class="absolute bottom-0 left-0 w-full p-4 bg-green-200 border-t-2 border-green-300 transform translate-y-full group-hover:translate-y-0 transition-transform duration-500 ease-in-out z-10">
+                                <p class="text-sm text-green-900 font-medium">
+                                    <span class="font-bold">Key Advantage:</span> This is our chosen path because Prometheus metrics can be seamlessly collected and converted into the OpenTelemetry (OTel) format.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                 <div class="mt-8 bg-indigo-50 border-l-4 border-indigo-500 text-indigo-800 p-6 rounded-r-lg">
+                    <p class="font-bold text-lg">Centralized Configuration:</p>
+                    <p>All these monitoring mechanisms are configured within the <code class="bg-indigo-200 text-indigo-900 rounded px-1 py-0.5 font-mono">neo4j.conf</code> file, giving us centralized control over how metrics are exposed.</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Section 3: Custom Application Telemetry -->
+        <section id="custom-telemetry" class="section-card">
+            <div class="flex items-center mb-6">
+                <div class="icon-box bg-purple-100 mb-0">
+                    <svg class="h-8 w-8 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" /></svg>
+                </div>
+                <h2 class="text-3xl font-bold ml-4">Augmenting with Custom Telemetry</h2>
+            </div>
+            <div>
+                <p class="text-lg my-8 text-slate-600">
+                    While server metrics show the database's health, we need custom telemetry to see how our application code performs. We manually instrument our Python code to capture two key signals: <span class="font-bold text-purple-700">Traces</span> and <span class="font-bold text-cyan-700">Metrics</span>.
+                </p>
+            
+                <div class="grid md:grid-cols-2 gap-8">
+                    <div class="bg-purple-50 p-6 rounded-xl border border-purple-200">
+                        <div class="flex items-center mb-3">
+                            <svg class="h-6 w-6 text-purple-600 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                            <h3 class="text-2xl font-bold text-purple-800">Traces</h3>
+                        </div>
+                        <p class="text-slate-600 mb-2">Traces follow a single request's journey through our application, composed of individual steps called "spans".</p>
+                        <p class="font-semibold text-slate-700">Answers: "Where is our code spending the most time?"</p>
+                    </div>
+                    <div class="bg-cyan-50 p-6 rounded-xl border border-cyan-200">
+                        <div class="flex items-center mb-3">
+                            <svg class="h-6 w-6 text-cyan-600 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
+                            <h3 class="text-2xl font-bold text-cyan-800">Metrics</h3>
+                        </div>
+                        <p class="text-slate-600 mb-2">Metrics are numerical measurements captured at a point in time, like a counter or a timer.</p>
+                        <p class="font-semibold text-slate-700">Answers: "How many nodes did we create?" or "How long did it take?"</p>
+                    </div>
+                </div>
+
+                <div class="my-12">
+                    <h3 class="text-xl font-bold text-slate-800 mb-6 text-center">Instrumentation Flow Architecture</h3>
+                    <div class="flex flex-col md:flex-row items-stretch justify-center md:space-x-2 w-full">
+                        <div class="flex items-center justify-center text-center p-4 bg-sky-50 rounded-lg shadow-sm border border-sky-200 basis-1/4">
+                            <p class="font-bold text-sky-800">Application</p>
+                        </div>
+                        <div class="flex items-center justify-center transform rotate-90 md:rotate-0">
+                            <svg class="h-8 w-8 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 8l4 4m0 0l-4 4m4-4H3" /></svg>
+                        </div>
+                        <div class="text-center p-4 bg-lime-50 rounded-lg shadow-sm border border-lime-200 basis-1/4">
+                            <p class="font-bold text-lime-800">Base Wrapper</p>
+                            <p class="text-xs text-slate-500 border-t mt-2 pt-2">contains <code class="bg-lime-200 rounded px-1">Neo4jWrapper</code></p>
+                        </div>
+                        <div class="flex items-center justify-center transform rotate-90 md:rotate-0">
+                            <svg class="h-8 w-8 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 8l4 4m0 0l-4 4m4-4H3" /></svg>
+                        </div>
+                        <div class="text-center p-4 bg-purple-50 rounded-lg shadow-sm border border-purple-200 basis-1/4">
+                            <p class="font-bold text-purple-800">Base Telemetry</p>
+                            <p class="text-xs text-slate-500 border-t mt-2 pt-2">uses <code class="bg-purple-200 rounded px-1">TimeTelemetry</code></p>
+                        </div>
+                        <div class="flex items-center justify-center transform rotate-90 md:rotate-0">
+                            <svg class="h-8 w-8 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 8l4 4m0 0l-4 4m4-4H3" /></svg>
+                        </div>
+                        <div class="flex items-center justify-center text-center p-4 bg-amber-50 rounded-lg shadow-sm border border-amber-200 basis-1/4">
+                            <p class="font-bold text-amber-800">Telemetry Config</p>
+                        </div>
+                    </div>
+                </div>
+            
+                <div class="mt-12 bg-slate-50 rounded-2xl border border-slate-200 overflow-hidden">
+                    <header class="flex items-center p-5 bg-slate-100 border-b border-slate-200">
+                        <div class="icon-box bg-indigo-100 mr-4 mb-0">
+                            <svg class="h-6 w-6 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                        </div>
+                        <h3 class="text-xl font-bold text-slate-800">Case Study: Timing Every Cypher Query</h3>
+                    </header>
+                    <div class="p-6 space-y-6">
+                        <p class="text-slate-600">
+                            The key to our approach is a universal wrapper function, <code class="bg-slate-200 text-slate-900 rounded px-1 py-0.5 font-mono">execute_query()</code>. By instrumenting this single function with an OpenTelemetry span, we automatically time every query—reads and writes—without any changes to the calling code.
+                        </p>
+                        <div>
+                            <h4 class="font-semibold text-slate-700 mb-2">Python — Core Wrapper</h4>
+                            <pre class="code-block text-sm"><code>
+from typing import Callable, Any
+from neo4j import GraphDatabase, Driver, Record
+
+class YourService:
+    def __init__(self, neo4j_uri: str, auth: tuple[str, str]) -> None:
+        self.neo4j_uri = neo4j_uri
+        self.auth = auth
+
+    def execute_query(self, func: Callable[[Driver], Any]) -> list[Record]:
+        <span class="text-cyan-400">with</span> GraphDatabase.driver(self.neo4j_uri, auth=self.auth) <span class="text-cyan-400">as</span> driver:
+            <span class="text-purple-400"># The wrapper creates the OTel span internally</span>
+            <span class="text-cyan-400">return</span> Neo4jWrapper(driver=driver).wrapper(func)
+                            </code></pre>
+                        </div>
+                        <div>
+                            <h4 class="font-semibold text-slate-700 mb-2">Python — Example Query (Automatically Traced)</h4>
+                            <pre class="code-block text-sm"><code>
+node_label = node.type
+node_id = node.id
+
+records = self.execute_query(
+    <span class="text-green-400">lambda</span> driver: driver.execute_query(
+        <span class="text-amber-300">f"""
+        MATCH (n:{node_label} {{id: '{node_id}'}})
+        RETURN n
+        """</span>,
+        database_=database_name,
+    )
+)
+                            </code></pre>
+                        </div>
+                        <div class="bg-teal-50 border-l-4 border-teal-500 text-teal-800 p-4 rounded-r-lg flex items-start">
+                            <svg class="h-6 w-6 mr-3 flex-shrink-0 text-teal-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" /></svg>
+                            <div>
+                                <h4 class="font-bold">Business Value</h4>
+                                <p class="text-sm">Every query is traced and timed consistently, giving clear performance insights without extra developer effort.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Section 4: OTel Collector Configuration -->
+        <section id="collector-config" class="section-card">
+            <div class="flex items-center mb-6">
+                <div class="icon-box bg-orange-100 mb-0">
+                    <svg class="h-8 w-8 text-orange-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                </div>
+                <h2 class="text-3xl font-bold ml-4">Configuring the OpenTelemetry Collector</h2>
+            </div>
+            <div>
+                <p class="text-lg my-8 text-slate-600">
+                    The OpenTelemetry Collector is the central component that receives, processes, and exports our telemetry data. It's configured with three main types of components which form a pipeline.
+                </p>
+
+                <div class="mb-6 bg-gray-100 p-4 rounded-lg flex items-center text-sm">
+                    <svg class="h-5 w-5 text-gray-500 mr-3 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                    <span class="text-slate-600">
+                        For a deep dive into collector configuration, see the 
+                        <a href="https://opentelemetry.io/docs/collector/configuration/" target="_blank" rel="noopener noreferrer" class="font-semibold text-blue-600 hover:underline">
+                            official OTel documentation
+                        </a>.
+                    </span>
+                </div>
+
+                <div class="grid md:grid-cols-3 gap-6">
+                    <!-- Receivers Card -->
+                    <div id="open-receivers-modal" class="cursor-pointer block hover:shadow-lg transition-shadow duration-300 rounded-xl">
+                        <div class="bg-sky-50 p-6 rounded-xl border border-sky-200 h-full">
+                            <h3 class="text-2xl font-bold text-sky-800 mb-3">Receivers</h3>
+                            <p class="text-slate-600 mb-4">Receivers collect telemetry from one or more sources. They are how data gets into the collector.</p>
+                            <div class="text-sm bg-sky-100 text-sky-900 p-3 rounded-lg">
+                                <p><span class="font-bold">Our Use Case:</span> We configure receivers for Prometheus (to scrape Neo4j metrics) and OTLP (for our custom application traces).</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Processors Card -->
+                    <div id="open-processors-modal" class="cursor-pointer block hover:shadow-lg transition-shadow duration-300 rounded-xl">
+                         <div class="bg-gray-50 p-6 rounded-xl border border-gray-200 h-full">
+                            <h3 class="text-2xl font-bold text-gray-800 mb-3">Processors</h3>
+                            <p class="text-slate-600 mb-4">Processors modify or transform telemetry data after it's received but before it's exported.</p>
+                             <div class="text-sm bg-gray-100 text-gray-900 p-3 rounded-lg">
+                                <p><span class="font-bold">Our Use Case:</span> No processors are needed at this stage, but they could be used later for batching or filtering.</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Exporters Card -->
+                    <div id="open-exporters-modal" class="cursor-pointer block hover:shadow-lg transition-shadow duration-300 rounded-xl">
+                        <div class="bg-emerald-50 p-6 rounded-xl border border-emerald-200 h-full">
+                             <h3 class="text-2xl font-bold text-emerald-800 mb-3">Exporters</h3>
+                            <p class="text-slate-600 mb-4">Exporters send data to one or more backends or destinations for storage and analysis.</p>
+                             <div class="text-sm bg-emerald-100 text-emerald-900 p-3 rounded-lg">
+                                <p><span class="font-bold">Our Use Case:</span> We can configure exporters for logging (for debug), Prometheus, or a backend like Jaeger/Zipkin.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                 <div class="mt-12 bg-slate-50 rounded-2xl border border-slate-200 overflow-hidden">
+                    <header class="flex items-center p-5 bg-slate-100 border-b border-slate-200">
+                        <div class="icon-box bg-blue-100 mr-4 mb-0">
+                           <svg class="h-6 w-6 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" /></svg>
+                        </div>
+                        <h3 class="text-xl font-bold text-slate-800">Running the Collector</h3>
+                    </header>
+                    <div class="p-6 space-y-6">
+                        <ol class="list-decimal list-inside space-y-4 text-slate-600">
+                            <li>Ensure you have added the Prometheus configuration to your <code class="bg-slate-200 text-slate-900 rounded px-1 py-0.5 font-mono">neo4j.conf</code> file.</li>
+                            <li>In your terminal, navigate to the <code class="bg-slate-200 text-slate-900 rounded px-1 py-0.5 font-mono">otel_setup</code> folder within your <code class="bg-slate-200 text-slate-900 rounded px-1 py-0.5 font-mono">CodeConcise</code> repository.</li>
+                            <li>
+                                Create the necessary directories for the file exporters:
+                                <pre class="code-block text-sm mt-2"><code>mkdir -p otel-data/metrics otel-data/traces otel-data/prometheus</code></pre>
+                            </li>
+                            <li>
+                                Start the OTel Collector. Choose one of the following methods:
+                                <ol class="list-[lower-alpha] list-inside space-y-4 text-slate-600">
+                                <li>
+                                    Using docker-compose.yaml:
+                                    <pre class="code-block text-sm"><code>docker compose up</code></pre>
+                                </li>
+                                <li>
+                                    Using a direct Docker command:
+                                    <pre class="code-block text-sm"><code>docker run --rm \
+  -v "$PWD/otel-collector.yaml:/etc/otelcol/config.yaml:ro" \
+  -v "$PWD/otel-data:/var/lib/otelcol" \
+  -p 4317:4317 -p 4318:4318 \
+  --add-host=host.docker.internal:host-gateway \
+  otel/opentelemetry-collector-contrib:latest \
+  --config /etc/otelcol/config.yaml</code></pre>
+                                </li>
+                            </li>
+                        </ol>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <footer class="text-center p-8 text-slate-500">
+        <p>&copy; 2024 Your Company Name. Observation report on Neo4j & OpenTelemetry.</p>
+    </footer>
+
+    <!-- Modals -->
+    <div id="csv-modal" class="fixed inset-0 bg-black bg-opacity-60 hidden items-center justify-center p-4 z-50">
+        <div class="modal-container bg-white rounded-2xl shadow-2xl w-full max-w-2xl">
+            <div class="modal-content transform scale-95 opacity-0">
+                <div class="flex justify-between items-center p-5 border-b border-slate-200">
+                    <div class="flex items-center">
+                        <div class="icon-box bg-red-100 mr-4 mb-0"><svg class="h-6 w-6 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V7a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg></div>
+                        <h3 class="text-xl font-bold text-slate-800">CSV Metrics Configuration</h3>
+                    </div>
+                    <button id="close-csv-modal" class="text-3xl text-slate-400 hover:text-slate-800 transition-colors">&times;</button>
+                </div>
+                <div class="p-6">
+                     <p class="mb-4 text-slate-600">Add or update the following lines in your <code class="bg-slate-200 text-slate-900 rounded px-1 py-0.5 font-mono">neo4j.conf</code> file:</p>
+                     <pre class="code-block text-sm"><code>
+server.metrics.csv.enabled=true
+server.directories.metrics=/local/file/system/path
+server.metrics.csv.interval=30s
+server.metrics.csv.rotation.keep_number=7
+server.metrics.csv.rotation.size=10.00MiB
+server.metrics.csv.rotation.compression=ZIP
+                     </code></pre>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div id="jmx-modal" class="fixed inset-0 bg-black bg-opacity-60 hidden items-center justify-center p-4 z-50">
+        <div class="modal-container bg-white rounded-2xl shadow-2xl w-full max-w-2xl">
+            <div class="modal-content transform scale-95 opacity-0">
+                <div class="flex justify-between items-center p-5 border-b border-slate-200">
+                    <div class="flex items-center">
+                        <div class="icon-box bg-red-100 mr-4 mb-0"><svg class="h-6 w-6 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 21h7a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v11m0 5l-3-3m0 0l3-3m-3 3h6" /></svg></div>
+                        <h3 class="text-xl font-bold text-slate-800">JMX MBeans Configuration</h3>
+                    </div>
+                    <button id="close-jmx-modal" class="text-3xl text-slate-400 hover:text-slate-800 transition-colors">&times;</button>
+                </div>
+                <div class="p-6">
+                     <p class="mb-4 text-slate-600">Add or update the following lines in your <code class="bg-slate-200 text-slate-900 rounded px-1 py-0.5 font-mono">neo4j.conf</code> file:</p>
+                     <pre class="code-block text-sm"><code>
+server.metrics.jmx.enabled=true
+server.jvm.additional=-Dcom.sun.management.jmxremote
+server.jvm.additional=-Dcom.sun.management.jmxremote.port=3637
+server.jvm.additional=-Dcom.sun.management.jmxremote.rmi.port=3637
+server.jvm.additional=-Dcom.sun.management.jmxremote.authenticate=false
+server.jvm.additional=-Dcom.sun.management.jmxremote.ssl=false
+server.jvm.additional=-Djava.rmi.server.hostname=127.0.0.1
+                     </code></pre>
+                    <div class="mt-6 bg-blue-50 border-l-4 border-blue-500 text-blue-800 p-4 rounded-r-lg">
+                        <p class="font-bold">Viewing Metrics with jconsole</p>
+                        <p class="mt-1">Once configured, you can connect to the JMX endpoint using a tool like <code class="bg-blue-200 rounded px-1">jconsole</code>. Run the following command in your terminal:</p>
+                        <pre class="bg-blue-100 text-blue-900 rounded p-2 mt-2 font-mono text-sm"><code>jconsole localhost:3637</code></pre>
+                        <p class="mt-2">This will open a GUI where you can browse and view the same metrics available via CSV in real-time.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div id="graphite-modal" class="fixed inset-0 bg-black bg-opacity-60 hidden items-center justify-center p-4 z-50">
+        <div class="modal-container bg-white rounded-2xl shadow-2xl w-full max-w-2xl">
+            <div class="modal-content transform scale-95 opacity-0">
+                <div class="flex justify-between items-center p-5 border-b border-slate-200">
+                    <div class="flex items-center">
+                        <div class="icon-box bg-red-100 mr-4 mb-0"><svg class="h-6 w-6 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 8v8m-4-5v5m-4-2v2m-2 4h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg></div>
+                        <h3 class="text-xl font-bold text-slate-800">Graphite Configuration</h3>
+                    </div>
+                    <button id="close-graphite-modal" class="text-3xl text-slate-400 hover:text-slate-800 transition-colors">&times;</button>
+                </div>
+                <div class="p-6">
+                     <p class="mb-4 text-slate-600">Add or update the following lines in your <code class="bg-slate-200 text-slate-900 rounded px-1 py-0.5 font-mono">neo4j.conf</code> file:</p>
+                     <pre class="code-block text-sm"><code>
+server.metrics.graphite.enabled=true
+server.metrics.graphite.server=localhost:2003
+server.metrics.graphite.interval=30s
+server.metrics.prefix=neo4j
+                     </code></pre>
+                    <div class="mt-6 bg-blue-50 border-l-4 border-blue-500 text-blue-800 p-4 rounded-r-lg">
+                        <p class="font-bold">Running a Local Graphite Instance</p>
+                        <p class="mt-1">You can run Graphite locally using Docker. This command exposes the necessary ports and mounts a volume for persistent storage:</p>
+                        <pre class="bg-blue-100 text-blue-900 rounded p-2 mt-2 font-mono text-sm"><code>
+docker run -d --name graphite \
+  -p 8080:80 \
+  -p 2003:2003 \
+  -v graphite-storage:/opt/graphite/storage \
+  graphiteapp/graphite-statsd:latest
+                        </code></pre>
+                        <p class="mt-2">Once running, you can access the Graphite web interface at <a href="http://localhost:8080" target="_blank" class="font-semibold hover:underline">http://localhost:8080</a>.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div id="prometheus-modal" class="fixed inset-0 bg-black bg-opacity-60 hidden items-center justify-center p-4 z-50">
+        <div class="modal-container bg-white rounded-2xl shadow-2xl w-full max-w-2xl">
+            <div class="modal-content transform scale-95 opacity-0">
+                <div class="flex justify-between items-center p-5 border-b border-slate-200">
+                    <div class="flex items-center">
+                        <div class="icon-box bg-green-100 mr-4 mb-0"><svg class="h-6 w-6 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z" /></svg></div>
+                        <h3 class="text-xl font-bold text-slate-800">Prometheus Configuration</h3>
+                    </div>
+                    <button id="close-prometheus-modal" class="text-3xl text-slate-400 hover:text-slate-800 transition-colors">&times;</button>
+                </div>
+                <div class="p-6 space-y-6">
+                    <div>
+                        <h4 class="font-bold text-slate-700 mb-2">Step 1: Configure Neo4j</h4>
+                        <p class="mb-2 text-sm text-slate-600">Add or update these lines in your <code class="bg-slate-200 text-slate-900 rounded px-1 py-0.5 font-mono">neo4j.conf</code> file to expose the endpoint:</p>
+                        <pre class="code-block text-sm"><code>
+server.metrics.enabled=true
+server.metrics.prometheus.enabled=true
+server.metrics.prometheus.endpoint=localhost:2004
+                        </code></pre>
+                    </div>
+                    <div>
+                        <h4 class="font-bold text-slate-700 mb-2">Step 2: Install & Configure Prometheus</h4>
+                        <p class="mb-2 text-sm text-slate-600">Install Prometheus (e.g., using Homebrew) and create a <code class="bg-slate-200 text-slate-900 rounded px-1 py-0.5 font-mono">prometheus.yml</code> file to tell it where to scrape metrics from:</p>
+                        <pre class="code-block text-sm mb-4"><code>brew install prometheus</code></pre>
+                        <p class="text-sm text-slate-600 mb-2">Contents for <code class="bg-slate-200 text-slate-900 rounded px-1 py-0.5 font-mono">prometheus.yml</code>:</p>
+                        <pre class="code-block text-sm"><code>
+global:
+  scrape_interval: 15s
+scrape_configs:
+  - job_name: 'neo4j'
+    static_configs:
+      - targets: ['localhost:2004']
+                        </code></pre>
+                    </div>
+                     <div>
+                        <h4 class="font-bold text-slate-700 mb-2">Step 3: Run Prometheus</h4>
+                        <p class="mb-2 text-sm text-slate-600">Start the Prometheus server, pointing it to your new configuration file:</p>
+                        <pre class="code-block text-sm"><code>prometheus --config.file=prometheus.yml</code></pre>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- RECEIVERS MODAL -->
+    <div id="receivers-modal" class="fixed inset-0 bg-black bg-opacity-60 hidden items-center justify-center p-4 z-50">
+        <div class="modal-container bg-white rounded-2xl shadow-2xl w-full max-w-2xl">
+            <div class="modal-content transform scale-95 opacity-0">
+                <div class="flex justify-between items-center p-5 border-b border-slate-200">
+                    <div class="flex items-center">
+                        <div class="icon-box bg-sky-100 mr-4 mb-0">
+                            <svg class="h-6 w-6 text-sky-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" /></svg>
+                        </div>
+                        <h3 class="text-xl font-bold text-slate-800">Receiver Configuration (otel-collector.yaml)</h3>
+                    </div>
+                    <button id="close-receivers-modal" class="text-3xl text-slate-400 hover:text-slate-800 transition-colors">&times;</button>
+                </div>
+                <div class="p-6 space-y-6">
+                    <div>
+                        <h4 class="font-bold text-slate-700 mb-2">For Custom Application Telemetry</h4>
+                        <p class="mb-2 text-sm text-slate-600">The <code class="bg-slate-200 text-slate-900 rounded px-1 py-0.5 font-mono">otlp</code> receiver listens for telemetry (traces, metrics) sent directly from our instrumented Python application.</p>
+                        <pre class="code-block text-sm"><code>
+otlp:
+  protocols:
+    grpc:
+      endpoint: 0.0.0.0:4317
+    http:
+      endpoint: 0.0.0.0:4318
+</code></pre>
+                    </div>
+                    <div>
+                        <h4 class="font-bold text-slate-700 mb-2">For Neo4j Database Metrics</h4>
+                        <p class="mb-2 text-sm text-slate-600">The <code class="bg-slate-200 text-slate-900 rounded px-1 py-0.5 font-mono">prometheus</code> receiver scrapes the metrics endpoint that we enabled in the <code class="bg-slate-200 text-slate-900 rounded px-1 py-0.5 font-mono">neo4j.conf</code> file.</p>
+                        <pre class="code-block text-sm"><code>
+prometheus:
+  config:
+    global:
+      scrape_interval: 10s
+    scrape_configs:
+      - job_name: 'neo4j_prometheus'
+        static_configs:
+          - targets: ['host.docker.internal:2004']
+</code></pre>
+                    </div>
+                     <p class="text-xs text-slate-500 italic pt-4 border-t">Note: Both of these configurations are nested under the top-level <code class="bg-slate-200 text-slate-900 rounded px-1 py-0.5 font-mono">receivers:</code> key in the main <code class="bg-slate-200 text-slate-900 rounded px-1 py-0.5 font-mono">otel-collector.yaml</code> file.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- EXPORTERS MODAL -->
+    <div id="exporters-modal" class="fixed inset-0 bg-black bg-opacity-60 hidden items-center justify-center p-4 z-50">
+        <div class="modal-container bg-white rounded-2xl shadow-2xl w-full max-w-2xl">
+            <div class="modal-content transform scale-95 opacity-0">
+                <div class="flex justify-between items-center p-5 border-b border-slate-200">
+                    <div class="flex items-center">
+                        <div class="icon-box bg-emerald-100 mr-4 mb-0">
+                            <svg class="h-6 w-6 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H3m14 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" /></svg>
+                        </div>
+                        <h3 class="text-xl font-bold text-slate-800">Exporter Configuration (otel-collector.yaml)</h3>
+                    </div>
+                    <button id="close-exporters-modal" class="text-3xl text-slate-400 hover:text-slate-800 transition-colors">&times;</button>
+                </div>
+                <div class="p-6 space-y-6">
+                    <div>
+                        <h4 class="font-bold text-slate-700 mb-2">Debug Exporter</h4>
+                        <p class="mb-2 text-sm text-slate-600">Prints all received telemetry data to the console. This is invaluable for troubleshooting the collector itself.</p>
+                        <pre class="code-block text-sm"><code>
+debug: {}
+</code></pre>
+                    </div>
+                     <div>
+                        <h4 class="font-bold text-slate-700 mb-2">File Exporter: Storing Traces</h4>
+                        <p class="mb-2 text-sm text-slate-600">Saves incoming trace data to a specified JSON file for offline analysis.</p>
+                        <pre class="code-block text-sm"><code>
+file/traces:
+  path: /var/lib/otelcol/traces/otel_traces.json
+  format: json
+</code></pre>
+                    </div>
+                    <div>
+                        <h4 class="font-bold text-slate-700 mb-2">File Exporter: Storing Metrics</h4>
+                        <p class="mb-2 text-sm text-slate-600">Saves incoming metric data to a specified JSON file.</p>
+                        <pre class="code-block text-sm"><code>
+file/metrics:
+  path: /var/lib/otelcol/metrics/otel_metrics.json
+  format: json
+</code></pre>
+                    </div>
+                    <div>
+                        <h4 class="font-bold text-slate-700 mb-2">File Exporter: Storing Prometheus Metrics</h4>
+                        <p class="mb-2 text-sm text-slate-600">Saves the scraped Prometheus metrics to their own JSON file.</p>
+                        <pre class="code-block text-sm"><code>
+file/prometheus:
+  path: /var/lib/otelcol/prometheus/otel_prometheus.json
+  format: json
+</code></pre>
+                    </div>
+                     <p class="text-xs text-slate-500 italic pt-4 border-t">Note: All of these configurations are nested under the top-level <code class="bg-slate-200 text-slate-900 rounded px-1 py-0.5 font-mono">exporters:</code> key in the main <code class="bg-slate-200 text-slate-900 rounded px-1 py-0.5 font-mono">otel-collector.yaml</code> file.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- PROCESSORS MODAL -->
+    <div id="processors-modal" class="fixed inset-0 bg-black bg-opacity-60 hidden items-center justify-center p-4 z-50">
+        <div class="modal-container bg-white rounded-2xl shadow-2xl w-full max-w-2xl">
+            <div class="modal-content transform scale-95 opacity-0">
+                <div class="flex justify-between items-center p-5 border-b border-slate-200">
+                    <div class="flex items-center">
+                        <div class="icon-box bg-gray-100 mr-4 mb-0">
+                            <svg class="h-6 w-6 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M12 6V3m0 18v-3" /></svg>
+                        </div>
+                        <h3 class="text-xl font-bold text-slate-800">Processor Configuration (otel-collector.yaml)</h3>
+                    </div>
+                    <button id="close-processors-modal" class="text-3xl text-slate-400 hover:text-slate-800 transition-colors">&times;</button>
+                </div>
+                <div class="p-6 space-y-6">
+                    <div>
+                        <p class="mb-4 text-slate-600">Processors are an optional step in the pipeline used to modify or transform telemetry data. While they can be powerful for tasks like filtering, sampling, or batching, <strong class="text-slate-800">we don't have an immediate need to modify our telemetry data, so this section can be left empty for now.</strong></p>
+                        <p class="mb-2 text-sm text-slate-600">If we wanted to enable simple batching of telemetry data before exporting (a common best practice), the configuration would look like this:</p>
+                        <pre class="code-block text-sm"><code>
+processors:
+  batch: {}
+</code></pre>
+                    </div>
+                     <p class="text-xs text-slate-500 italic pt-4 border-t">Note: This configuration is nested under the top-level <code class="bg-slate-200 text-slate-900 rounded px-1 py-0.5 font-mono">processors:</code> key in the main <code class="bg-slate-200 text-slate-900 rounded px-1 py-0.5 font-mono">otel-collector.yaml</code> file.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // Modal setup
+            const modals = []; 
+            function setupModal(openBtnId, modalId) {
+                const modal = document.getElementById(modalId);
+                if (!modal) return;
+                modals.push(modal);
+                const openBtn = document.getElementById(openBtnId);
+                const closeBtn = modal.querySelector('[id^="close-"]');
+                const modalContent = modal.querySelector('.modal-content');
+
+                const open = () => {
+                    modal.classList.remove('hidden');
+                    modal.classList.add('flex');
+                    setTimeout(() => {
+                        modal.querySelector('.modal-container').scrollTop = 0; // Reset scroll on open
+                        modalContent.classList.remove('scale-95', 'opacity-0');
+                        modalContent.classList.add('scale-100', 'opacity-100');
+                    }, 10);
+                };
+
+                const close = () => {
+                    modalContent.classList.add('scale-95', 'opacity-0');
+                    modalContent.classList.remove('scale-100', 'opacity-100');
+                    setTimeout(() => {
+                        modal.classList.add('hidden');
+                        modal.classList.remove('flex');
+                    }, 300);
+                };
+                if (openBtn) openBtn.addEventListener('click', open);
+                if (closeBtn) closeBtn.addEventListener('click', close);
+                modal.addEventListener('click', (e) => {
+                    if (e.target === modal) close();
+                });
+            }
+            setupModal('open-csv-modal', 'csv-modal');
+            setupModal('open-jmx-modal', 'jmx-modal');
+            setupModal('open-graphite-modal', 'graphite-modal');
+            setupModal('open-prometheus-modal', 'prometheus-modal');
+            setupModal('open-receivers-modal', 'receivers-modal');
+            setupModal('open-exporters-modal', 'exporters-modal');
+            setupModal('open-processors-modal', 'processors-modal');
+
+            document.addEventListener('keydown', (e) => {
+                if (e.key === "Escape") {
+                    const openModal = modals.find(m => !m.classList.contains('hidden'));
+                    if (openModal) {
+                        const closeBtn = openModal.querySelector('[id^="close-"]');
+                        if (closeBtn) closeBtn.click();
+                    }
+                }
+            });
+        });
+    </script>
+</body>
+</html>
+
